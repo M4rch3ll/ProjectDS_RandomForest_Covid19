@@ -1,0 +1,581 @@
+---
+title: "covid19_forcase"
+author: "Marchell Rianto"
+date: "9/3/2020"
+output: html_document
+---
+
+#clear variabel
+```{r}
+rm(list=ls())
+```
+
+```{r setup, include=FALSE}
+# setup chunk options
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  comment = "#>"
+)
+options(scipen = 9999)
+```
+
+#Load the following libraries. 
+
+```{r message=FALSE, warning=FALSE}
+#untuk export dokumen
+library(rmarkdown)
+# package for data wrangling/data manipulation
+library(dplyr)
+# package for working with date
+library(lubridate)
+# package for visualization
+library(ggplot2)
+# package untuk memahami script/R
+library(tidyverse)
+# tseries package for stationer data check
+library(tseries)
+# package Random Forest
+library(randomForest)
+# package forecast
+library(forecast)
+library(tsibble)
+library(TSstudio)
+library(caret)
+library(ggplot2)
+library(psych)
+
+
+```
+
+#Data Preparation dan Cleaning - Dataset COVID-19 Indonesia Time Series
+# Tahapan OSEMN
+# 1. Obtain Data 
+```{r}
+covid  <- read.csv("covid_19_indonesia_time_series_all.csv")
+names(covid)
+```
+#2. Scrubbing Data
+
+```{r}
+# fungsi untuk menampilkan type data dari kolom atau variabel
+head(covid)
+```
+
+
+```{r}
+tail(covid)
+```
+
+#Kita menghapus kolom yang tidak penting
+```{r}
+cvdbersih<- covid %>%
+select(-City.or.Regency, -Country, -Continent, -Growth.Factor.of.New.Cases, -Growth.Factor.of.New.Deaths, -Special.Status, -Total.Regencies, -Total.Cities, -Total.Districts, -Total.Urban.Villages, -Total.Rural.Villages, -Province, -Time.Zone, -Area..km2., -Population, -Population.Density, -Longitude, -Latitude, -New.Cases.per.Million, -Total.Cases.per.Million, -New.Deaths.per.Million, -Total.Deaths.per.Million, -Case.Fatality.Rate, -Case.Recovered.Rate)
+```
+
+
+```{r}
+#sampai sini hanya digunakan 13 Variabel Saja
+names(cvdbersih)
+```
+
+```{r}
+#glimpse untuk menampilkan tipe dan struktur data.
+glimpse(cvdbersih)
+```
+
+```{r}
+#kita mau lihat data yang missing value
+colSums(is.na(cvdbersih))
+```
+
+
+```{r}
+#rubah kolom Date dan Area jadi mudah dibaca
+colnames(cvdbersih)[colnames(cvdbersih) == "ï..Date"] = "Date"
+colnames(cvdbersih)[colnames(cvdbersih) == "Area..km2."] = "Area"
+```
+
+```{r}
+#fungsi na.omit untuk menghilangkan NA atau missing value
+cvdclean <- na.omit(cvdbersih)
+summary(cvdclean)
+```
+
+```{r}
+#disini kita pake variabel baru :  cvdclean
+glimpse(cvdclean)
+```
+
+
+```{r}
+# fungsi head digunakan untuk menampilkan 6 data teratas
+head(cvdclean)
+```
+```{r}
+names(cvdbersih)
+```
+```{r}
+names(cvdclean)
+```
+
+
+```{r}
+# fungsi tail digunakan untuk menampilkan 6 data terbawah
+tail(cvdclean)
+```
+
+```{r}
+# fungsi summary untuk melihat summary dari data dengan variabel cvdclean
+glimpse(cvdclean)
+```
+
+#  Exploratory Data Analysis (EDA)
+```{r}
+# fungsi dim untuk menampilkan jumlah kolom dan baris data
+dim(cvdclean)
+# fungsi nrow untuk menampilkan jumlah baris data : 9959 baris data
+nrow(cvdclean)
+# fungsi ncol untuk menampilkan jumlah kolom data : 13 Kolom
+ncol(cvdclean)
+
+```
+
+```{r}
+# fungsi adf.test untuk mengecek kestrasioneran data
+# data kita stasioner :)
+adf.test(cvdclean$Total.Cases)
+adf.test(cvdclean$Total.Deaths)
+adf.test(cvdclean$Total.Recovered)
+adf.test(cvdclean$Total.Active.Cases)
+```
+```{r}
+# merubah variabel date yang sebelumnya (char) => menjadi (date)
+# dengan format yyyy.mm.dd
+# disini kenapa error ya
+covidnew <- cvdclean %>%
+  mutate(Date = mdy (Date)) %>% 
+  arrange(Date)
+covidnew
+```
+```{r}
+glimpse(covidnew)
+head(covidnew)
+tail(covidnew)
+```
+
+
+```{r}
+# merubah menjadi date
+covidnew$Date <- as.Date(covidnew$Date)
+```
+
+
+```{r}
+#mengurutkan berdasarkan covidnew$Date
+
+covidnew <- covidnew [order(covidnew$Date), ]
+head(covidnew)
+```
+
+```{r}
+# tampilkan 6 data terbawah dengan 
+# variabel baru yaitu [covidnew]
+tail(covidnew)
+```
+
+
+# Visualisasi, TOTAL KASUS BARU berdasarkan provinsi dengan jumlah penduduk terbanyak di Indonesia
+```{r}
+targetLocation1 <- c("DKI Jakarta", "Jawa Timur", "Jawa Tengah", "Jawa Barat", "Sumatera Utara")
+target <- subset (covidnew, Location %in% targetLocation1)
+ggplot (data=target,
+        mapping=aes(x=Date, y=Total.Cases,color=Location)) + geom_line() + 
+  labs(x="Bulan",
+       y="Total Kasus",
+       title="Total Kasus di Indonesia") +
+  theme_gray()
+```
+
+
+# Visualisasi, TOTAL KEMATIAN berdasarkan provinsi dengan jumlah penduduk terbanyak di Indonesia
+```{r}
+targetLocation2 <-c("DKI Jakarta", "Jawa Timur", "Jawa Tengah", "Jawa Barat", "Sumatera Utara")
+target <- subset(covidnew, Location %in% targetLocation2)
+ggplot (data=target,
+        mapping = aes(x=Date, y= Total.Deaths, color=Location)) + geom_line() + 
+   labs(x="Bulan",
+       y="Total meninggal",
+       title="Total kasus meninggal di Indonesia") +
+  theme_gray()
+```
+# Visualisasi, TOTAL SEMBUH berdasarkan provinsi dengan jumlah penduduk terbanyak di Indonesia
+```{r}
+targetLocation3 <-c("DKI Jakarta", "Jawa Timur", "Jawa Tengah", "Jawa Barat", "Sumatera Utara")
+target <- subset(covidnew, Location %in% targetLocation3)
+ggplot (data=target,
+        mapping = aes(x=Date, y= Total.Recovered, color=Location)) + geom_line() + 
+   labs(x="Bulan",
+       y="Total Sembuh",
+       title="Total Sembuh di Indonesia") +
+  theme_gray()
+```
+
+
+#Visualisasi data Indonesia berdasarkan kasus baru
+```{r}
+indo_cases <- subset(covidnew, Location=="Indonesia")
+ggplot (data=indo_cases, 
+        mapping=aes(x=indo_cases$Date, y=indo_cases$New.Cases, color=Location)) + geom_line() + 
+  labs(x="Bulan",
+       y="Jumlah Kasus Baru",
+       title="Kasus baru di Indonesia") +
+  
+  theme_gray()
+```
+
+#Visualisasi kasus baru di Sumatera Utara
+```{r}
+sumut_cases <- subset(covidnew, Location=="Sumatera Utara")
+ggplot (data=sumut_cases,
+        mapping=aes(x=sumut_cases$Date, y=sumut_cases$New.Cases,
+color=Location)) + geom_line() +
+   labs(x="Bulan",
+       y="Jumlah Kasus Baru",
+       title="Kasus baru di SUMUT") +
+  
+  theme_gray()
+```
+```{r}
+glimpse(indo_cases)
+```
+
+# Visualisasi kasus yang terkonfirmasi, meninggal dan sembuh di Indonesia
+```{r}
+options(scipen=1)
+plot(indo_cases$Date, indo_cases$Total.Cases, 
+     pch=19, 
+     cex=0.3, 
+     main="Grafik Kasus COVID-19 di Indonesia",
+     sub="Data per tanggal 31 Desember 2020",
+     las=1,
+     xlab="", ylab="")
+lines(indo_cases$Date, indo_cases$Total.Cases, col="cornsilk3", lwd=2)
+lines(indo_cases$Date, indo_cases$Total.Recovered, col="lightblue", lwd=2)
+lines(indo_cases$Date, indo_cases$Total.Deaths, col="lightpink", lwd=2)
+lines(indo_cases$Date, indo_cases$Total.Active.Cases, col="lightgreen", lwd=2)
+legend("top", fill=c("cornsilk3", "lightblue", "lightpink", "lightgreen"), legend=c("Total Kasus", "Sembuh", "Meninggal", "Kasus Aktif")) 
+  
+```
+
+```{r}
+glimpse(sumut_cases)
+```
+
+
+# Visualisasi kasus yang terkonfirmasi, meninggal dan sembuh di Sumatera Utara
+```{r}
+options(scipen=1)
+plot(sumut_cases$Date, sumut_cases$Total.Cases, 
+     pch=19, 
+     cex=0.3, 
+     main="Grafik Kasus COVID-19 di Sumatera Utara",
+     sub="Data per tanggal 31 Desember 2020",
+     las=1,
+     xlab="", ylab="")
+lines(sumut_cases$Date, sumut_cases$Total.Cases, col="cornsilk3", lwd=2)
+lines(sumut_cases$Date, sumut_cases$Total.Recovered, col="lightblue", lwd=2)
+lines(sumut_cases$Date, sumut_cases$Total.Deaths, col="lightpink", lwd=2)
+lines(sumut_cases$Date, sumut_cases$Total.Active.Cases, col="lightgreen", lwd=2)
+legend("top", fill=c("cornsilk3", "lightblue", "lightpink", "lightgreen"), legend=c("Total Kasus", "Sembuh", "Meninggal", "Kasus Aktif"))
+```
+
+
+#RANDOM FOREST
+```{r}
+names(covidnew)
+```
+
+```{r}
+X <- covidnew %>%
+  select(Location.ISO.Code,Location,New.Cases,New.Deaths,New.Recovered,New.Active.Cases,Total.Deaths,Total.Recovered,Total.Active.Cases,Location.Level,Island)
+
+y <- covidnew$Total.Cases
+
+#Y = dijadikan Total.Cases
+```
+
+
+#Membagi data training dan data test
+```{r}
+index <- createDataPartition(y, p=0.75, list=FALSE)
+X_train <- X[ index, ]
+X_test <- X[-index, ]
+
+y_train <- y[index]
+y_test<-y[-index]
+
+```
+#Train model
+```{r}
+regr <- randomForest(x = X_train, y = y_train, maxnodes = 10,
+                     ntree = 10)
+```
+
+```{r}
+regr
+```
+```{r}
+plot(regr)
+plot(regrsu)
+```
+
+#Membuat Prediksi
+```{r}
+predictions <- predict(regr, X_test)
+
+result <- X_test
+result ['Total Kasus'] <- y_test
+result ['Prediksi'] <- predictions
+
+head(result)
+view(result)#paling kanan untuk liat Total kasus dan predictions
+```
+
+
+
+#A. INDONESIA
+#Visualisasi untuk prediksi Total Kasus meninggal [total.deaths] di Indonesia
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_test$Total.Deaths, y = y_test, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_test$Total.Deaths , y = predictions, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Meninggal", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+
+#Visualisasi untuk prediksi Total Sembuh [Total.Recovered] di Indoensia
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_test$Total.Recovered, y = y_test, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_test$Total.Recovered , y = predictions, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Sembuh", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+
+#Visualisasi untuk prediksi Total Kasus baru [New.Active.Cases] di Indoensia
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_test$New.Active.Cases, y = y_test, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_test$New.Active.Cases , y = predictions, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Kasus Baru", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+#Menghitung MAPE ini yang digunakan
+```{r}
+library(Metrics)
+paste0('MAPE: ' , mape(y_test,predictions ))
+```
+
+
+#Menghitung MAE
+```{r}
+library(Metrics)
+paste0('MAE: ' , mae(y_test,predictions ))
+```
+#Menghitung Mean Square Error
+```{r}
+paste0('MSE: ', caret::postResample(predictions, y_test)['RMSE']^2)
+```
+#Menghitung Nilai Rsquared
+```{r}
+paste0('R2: ' ,caret::postResample(predictions , y_test)['Rsquared'] )
+```
+# Nilai MSE dan MAE dari model sangat tidak baik, dengan tingkat akurasi model hampir 
+
+
+Tuning Parameter
+digunakan untuk mencari besaran node dan tree yang terbaik dari model
+#menyiapkan nilai N yang lebih sedikit
+
+```{r}
+N=500 #length(X_train)
+X_train_ = X_train[1:N , ]
+y_train_ = y_train[1:N]
+
+seed <-7
+metric<-'RMSE'
+
+customRF <- list(type = "Regression", library = "randomForest", loop = NULL)
+
+customRF$parameters <- data.frame(parameter = c("maxnodes", "ntree"), class = rep("numeric", 2), label = c("maxnodes", "ntree"))
+
+customRF$grid <- function(x, y, len = NULL, search = "grid") {}
+
+customRF$fit <- function(x, y, wts, param, lev, last, weights, classProbs, ...) {
+  randomForest(x, y, maxnodes = param$maxnodes, ntree=param$ntree, ...)
+}
+
+customRF$predict <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata)
+customRF$prob <- function(modelFit, newdata, preProc = NULL, submodels = NULL)
+   predict(modelFit, newdata, type = "prob")
+customRF$sort <- function(x) x[order(x[,1]),]
+customRF$levels <- function(x) x$classes
+```
+
+#Set grid parameter
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search='grid')
+```
+
+```{r}
+tunegrid <- expand.grid(.maxnodes=c(70,80,90,100), .ntree=c(900, 1000, 1100))
+set.seed(seed)
+```
+
+#Train model 
+#ini agak lama prosesnya dan memakan cpu dan ram, tapi hasil plot dibawah bisa jalan kok
+```{r}
+rf_gridsearch <- train(x=X_train_, y=y_train_, method=customRF, metric=metric, tuneGrid=tunegrid, trControl=control)
+```
+
+
+#hasil plot
+```{r}
+plot(rf_gridsearch)
+```
+
+#Menentukan parameter yang terbaik
+```{r}
+rf_gridsearch$bestTune
+```
+#Parameter terbaik dari model pada maxnodes 100 dan ntree 900 #revisi punya bapak..
+
+#Menampilkan variabel yang paling penting dari model prediksi
+
+```{r}
+varImpPlot(rf_gridsearch$finalModel, main ='Feature importance')
+```
+
+#B. SUMUT
+```{r}
+names(sumut_cases)
+```
+
+```{r}
+glimpse(sumut_cases)
+```
+
+```{r}
+head(sumut_cases)
+```
+
+
+```{r}
+Xsu <- sumut_cases %>%
+  select(Location.ISO.Code,Location,New.Cases,New.Deaths,New.Recovered,New.Active.Cases,Total.Deaths,Total.Recovered,Total.Active.Cases,Location.Level,Island)
+
+ysu <- sumut_cases$Total.Cases
+
+
+```
+
+#Membagi data training dan data test
+```{r}
+indexsu <- createDataPartition(ysu, p=0.75, list=FALSE)
+X_trainsu <- Xsu[ indexsu, ]
+X_testsu <- Xsu[-indexsu, ]
+
+y_trainsu <- ysu[indexsu]
+y_testsu<-ysu[-indexsu]
+
+head(y_testsu)
+head(y_trainsu)
+```
+
+#Train model
+```{r}
+set.seed(100)
+regrsu <- randomForest(x = X_trainsu, y = y_trainsu, maxnodes = 100,
+                     ntree = 1000)
+```
+
+```{r}
+regrsu
+```
+
+#Membuat Prediksi
+```{r}
+predictionsu <- predict(regrsu, X_testsu)
+
+resultsu <- X_testsu
+resultsu ['Total Kasus'] <- y_testsu
+resultsu ['Prediksi SUMUT'] <- predictionsu
+
+head(resultsu)
+view(resultsu)#untuk liat total prediksi paling kanan
+```
+
+```{r}
+summary(predictionsu)
+```
+
+#Visualisasi untuk prediksi Total Kasus meninggal [total.deaths] di SUMUT
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_testsu$Total.Deaths, y = y_testsu, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_testsu$Total.Deaths , y = predictionsu, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Meninggal", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+
+#Visualisasi untuk prediksi Total Sembuh [Total.Recovered] di SUMUT
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_testsu$Total.Recovered, y = y_testsu, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_testsu$Total.Recovered , y = predictionsu, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Sembuh", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+
+#Visualisasi untuk prediksi Total Kasus baru [New.Active.Cases] di SUMUT
+```{r}
+ggplot(  ) + 
+  geom_line( aes(x = X_testsu$New.Active.Cases, y = y_testsu, color = 'red', alpha = 0.5) ) + 
+  geom_line( aes(x = X_testsu$New.Active.Cases , y = predictionsu, color = 'blue',  alpha = 0.5)) + 
+  labs(x = "Total Kasus Baru", y = "Total Kasus", color = "", alpha = 'Transperency') +
+  scale_color_manual(labels = c( "Predicted", "Real"), values = c("blue", "red")) 
+```
+
+#Menghitung MAPE
+```{r}
+library(Metrics)
+paste0('MAPE: ' , mape(y_testsu,predictionsu ))
+```
+
+#Menghitung Nilai Rsquared pada SUMUT
+```{r}
+paste0('R2: ' ,caret::postResample(predictionsu , y_testsu)['Rsquared'] )
+```
+# Mengconversivariabel ke file csv
+```{r}
+write.table(predictionsu,file="test.csv",sep="")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
